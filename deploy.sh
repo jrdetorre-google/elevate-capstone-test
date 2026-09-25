@@ -56,6 +56,11 @@ gcloud run deploy "$SERVICE_NAME" \
   --allow-unauthenticated \
   --set-env-vars="VITE_QUESTIONS_BUCKET_URL=https://storage.googleapis.com/${BUCKET_NAME}/questions.json"
 
+gcloud run services add-iam-policy-binding "$SERVICE_NAME" \
+  --region="$REGION" \
+  --member="allUsers" \
+  --role="roles/run.invoker" || true
+
 echo "============================================================"
 SERVICE_URL=$(gcloud run services describe "$SERVICE_NAME" --region "$REGION" --format="value(status.url)")
 echo " Deployment Complete!"
