@@ -32,10 +32,10 @@ The application is structured around five tightly coupled, production-ready pill
   <img src="assets/images/architecture_diagram.png" alt="Enterprise Cloud Web Application Architecture" width="100%" />
 </p>
 
-### 1. Google Identity Authentication
-- Seamless single sign-on (SSO) via **Google Identity Services (GIS)** and **Firebase Auth**.
-- Captures profile metadata (`uid`, `email`, `displayName`, `photoURL`) with persistent local sessions.
-- Automatically initializes user profiles and protects exam and analytics routes.
+### 1. Mandatory Entry Portal Gatekeeper & Google Single Sign-On (SSO)
+- **Zero Unauthenticated Access**: Unauthenticated visitors are locked strictly to a dedicated **Landing Entry Portal** (`LoginGateway`). No exam questions, study materials, or dashboards can be accessed without signing in.
+- **Google Identity Single Sign-On**: Seamless authentication using **Google Identity Services (GIS)** and **Firebase Auth** with `GoogleAuthProvider`.
+- Captures candidate identity (`uid`, `email`, `displayName`, `photoURL`) with persistent local sessions to isolate database records per user.
 
 ### 2. Dynamic Cloud Storage Bucket Question Repository (`gs://...`)
 - The question bank is stored in a **Google Cloud Storage (GCS) bucket** (`gs://elevate-capstone-testprep-questions/questions.json`), completely decoupled from the container lifecycle.
@@ -45,21 +45,23 @@ The application is structured around five tightly coupled, production-ready pill
   - **On-Demand Manual Reload Trigger**: Users and administrators can click **"Sync Questions"** at any time to immediately force a reload of the latest questions from the bucket.
   - **Resilient Fallback**: Bundled fallback ensures the application remains 100% operational even offline or during initial local setup.
 
-### 3. Multilingual Exam Engine & Gemini Pre-Render Translation
-- Loaded dynamically from the active question corpus.
-- Offers zero-latency native English practice, alongside **dynamic on-the-fly translation** into Spanish, Portuguese, French, German, Italian, Japanese, Korean, or custom languages.
+### 3. Semantic Markdown-to-HTML Question Engine & Dynamic Translation
+- **Semantic Markdown Parsing**: Question stems, options, and slide reference explanations are converted dynamically into styled HTML (`<strong>`, `<em>`, `<code>`, `<ul>`, `<li>`), eliminating raw markdown asterisks (`*`) and backticks.
+- **Pre-Render Translation via Gemini**: Zero-latency native English practice, plus **dynamic on-the-fly translation** into Spanish, Portuguese, French, German, Italian, Japanese, Korean, or custom languages.
 - **Translate-Before-Render guarantee**: Questions and options never flicker in English while translating; Gemini generates structured output batches, persists them to local cache, and renders cleanly before the 45-minute countdown timer begins.
 - Strict preservation of official Google Cloud and Elevate technical terminology (e.g., `Agent Runtime`, `Agent Registry`, `ADK`, `MCP`, `A2A`, `Model Armor`, `CodeMender`).
 
-### 4. Cloud Firestore Historical Persistence
-- Immutable storage of each completed exam attempt in the `exam_attempts` collection.
+### 4. Cloud Firestore Historical Persistence & Zero-Mock Guarantee
+- **Immutable Historical Records**: Each completed exam simulation is persisted directly into Cloud Firestore (`exam_attempts/{attemptId}`).
+- **Strict Real Data**: No mock or fictitious progressions are ever seeded. The database records genuine user performance.
 - Logs elapsed time, selected language, exam mode, **overall score percentage**, and **category breakdowns** for all 4 modules (M0, M1, M2, M3).
 - Stores full question-level audit trails (`userSelected`, `correctOptions`, `isCorrect`) for post-exam review.
 
-### 5. Interactive Time-Series Evolution Dashboard
+### 5. Interactive Time-Series Evolution Dashboard & Baseline State
 - Personal analytics portal (`/dashboard`) visualizing candidate progression over time.
+- **First-Time Candidate Baseline**: Displays a clean, motivating empty state for new candidates (0 attempts, `--` average, "Baseline Required") until their first real exam attempt is recorded.
 - Compares learning curves directly against the **official 90% HackerRank benchmark**.
-- Detects knowledge gaps automatically and recommends focused study modules.
+- Detects knowledge gaps automatically across M0, M1, M2, and M3 to recommend focused study modules.
 
 ---
 

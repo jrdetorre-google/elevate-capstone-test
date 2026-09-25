@@ -104,39 +104,48 @@ flowchart TD
 
 ---
 
-### 2.1 Google Identity & Authentication Pipeline (`Google Identity & Auth Pipeline`)
+### 2.1 Google Identity & Authentication Pipeline: Mandatory Entry Portal Gatekeeper
 
-1. **Authentication Provider and Workflow**:
-   - Integration with **Google Identity Services (GIS)** or **Firebase Authentication** using the **Google Provider (`GoogleAuthProvider`)**.
-   - Standard OAuth 2.0 / OpenID Connect workflow requesting scopes: `openid`, `email`, `profile`.
-   - Optional enterprise domain validation (e.g., allow any Google account or highlight `@google.com` corporate accounts for Google Cloud CEs).
-   - Sign-in via popup window or seamless redirect, configured with persistent session storage (`LOCAL_PERSISTENCE`) to prevent unwanted sign-outs on page reloads.
+1. **Mandatory Landing Entry Portal (`LoginGateway`)**:
+   - The application enforces a strict **Entry Portal Gatekeeper**: When an unauthenticated user arrives at the application URL, they are presented exclusively with a branded **Landing Entry Portal**.
+   - **Zero Unauthenticated Access**: Under no circumstances can an unauthenticated visitor view, browse, or interact with the exam simulator, question bank, study mode, or performance dashboards. All application tabs, timers, and question data are strictly withheld behind the authentication barrier.
+   - **Single Sign-On (SSO) with Google**:
+     - Candidate authentication is performed exclusively via **Google Single Sign-On (SSO)** utilizing **Google Identity Services (GIS)** / **Firebase Authentication** with `GoogleAuthProvider`.
+     - Standard OAuth 2.0 / OpenID Connect workflow capturing Google profile metadata: `uid`, `email`, `displayName`, and `photoURL`.
+     - Prominent, official *"Sign in with Google"* action button following Google Branding Guidelines.
+     - Persistent session configuration (`LOCAL_PERSISTENCE`) to prevent session drops during browser refresh.
 
-2. **Session State Management (`AuthContext.tsx` & `useAuth` Hook)**:
-   - Implement a global React context (`AuthContext`) exposing:
+2. **Session State Management & Identity Binding**:
+   - Global React context (`AuthContext`) tracks authentication state:
      ```typescript
      interface AuthState {
-       user: UserProfile | null;
+       user: AppUser | null;
        isAuthenticated: boolean;
        isLoading: boolean;
-       loginWithGoogle: () => Promise<void>;
-       logout: () => Promise<void>;
+       signInWithGoogle: () => Promise<void>;
+       signOutUser: () => Promise<void>;
      }
      ```
-   - Upon authentication, automatically sync or create the user record in the `users` database collection (including account creation date, last login timestamp, and avatar).
+   - All subsequent database transactions, exam submissions, and dashboard queries are strictly bounded to the candidate's verified Google `uid` and `email`.
 
-3. **Identity Visual Components**:
-   - **Login Screen / Welcome Modal**:
-     - Clean, focused landing view for unauthenticated users highlighting the value of the *Project Elevate Capstone* accreditation tool.
-     - Official branded action button: *"Sign in with Google"* (following Google branding guidelines with official multicolor icon).
-   - **Navigation Bar (`Navbar`)**:
-     - When authenticated, displays in the top-right header:
-       - Circular avatar with the user's Google profile picture (`photoURL`).
-       - User display name (`displayName`) and corporate email (`email`).
-       - Direct shortcut to the **Evolution Dashboard** (`/dashboard`) featuring an analytics icon (`TrendingUp` or `BarChart3`).
-       - Dropdown menu (*Account Dropdown*) with an explicit **Sign Out** action.
-   - **Route Protection & Attempt Flow**:
-     - Exam execution (`/exam`) and dashboard analytics (`/dashboard`) routes require active authentication. If an unauthenticated user clicks *"Start Exam"* or *"View History"*, the Google sign-in modal is triggered immediately to guarantee that all results are persisted to their identity.
+3. **Markdown-to-HTML Question Rendering Engine**:
+   - **Problem Statement**: The questions corpus (`questions.json` / `questions.md`) is authored with Markdown formatting (e.g., `**bold text**` for key terms, `*italic*` for emphasis, `` `code` `` for commands and API symbols, bullet lists for multi-clause specifications). Rendering these as raw text exposes unparsed markdown characters (`*`, `**`, `` ` ``), degrading candidate readability.
+   - **Semantic HTML Parser (`MarkdownRenderer`)**:
+     - All question stems, option choices, and slide context explanations MUST be parsed and rendered into semantic, accessible HTML:
+       - `**bold**` / `__bold__` $\rightarrow$ `<strong class="font-semibold text-slate-100">...</strong>`
+       - `*italic*` / `_italic_` $\rightarrow$ `<em class="italic text-slate-300">...</em>`
+       - `` `inline code` `` $\rightarrow$ `<code class="px-1.5 py-0.5 rounded bg-slate-800 text-blue-300 font-mono text-xs sm:text-sm">...</code>`
+       - Multiline bullet points $\rightarrow$ formatted `<ul>` and `<li>` elements.
+     - Complete sanitization to prevent XSS vulnerabilities while ensuring zero raw asterisks are visible on screen.
+
+4. **Strict Real Database Data & Zero-State Dashboard Guarantee**:
+   - **Pure Database Backing**: All metrics, history tables, and charts on `/dashboard` must reflect strictly authentic data retrieved from Cloud Firestore (`projects/elevate-capstone-testprep/databases/(default)`).
+   - **Elimination of Mock/Ghost Data**: No mock or fictitious progression data (`generateSampleProgression`) may be injected for new users.
+   - **Candidate Baseline Empty State**:
+     - If a candidate has 0 previous attempts in Firestore, the dashboard displays a clean **Baseline Required** empty state:
+       - 0 attempts recorded, `--` average score, `Needs Baseline` readiness badge.
+       - Motivational call-to-action: *"Launch Your First 30-Question Capstone Simulation"*.
+       - Charts and module mastery graphs remain dormant until the candidate completes and persists their first real exam attempt.
 
 ---
 
