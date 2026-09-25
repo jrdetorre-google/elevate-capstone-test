@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 set -eo pipefail
 
+export CLOUDSDK_PYTHON="${CLOUDSDK_PYTHON:-$HOME/.local/share/uv/python/cpython-3.11-macos-aarch64-none/bin/python3.11}"
+export PATH="$HOME/google-cloud-sdk/bin:$PATH"
+
 PROJECT_ID="elevate-capstone-testprep"
 REGION="europe-southwest1"
 SERVICE_NAME="elevate-capstone-simulator"
