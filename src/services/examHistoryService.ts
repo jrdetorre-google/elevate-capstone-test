@@ -30,16 +30,21 @@ export class ExamHistoryService {
     existing.push(attempt);
     localStorage.setItem(localKey, JSON.stringify(existing));
 
-    // 2. If Firebase is active, persist to Firestore
-    if (isFirebaseConfigured && !attempt.userId.startsWith('demo_')) {
+    // 2. If Firebase is active, persist to Cloud Firestore
+    if (isFirebaseConfigured) {
       try {
         const attemptRef = doc(db, 'exam_attempts', attempt.id);
         await setDoc(attemptRef, attempt);
 
-        // Update user summary
+        // Update aggregate user summary
         const userRef = doc(db, 'users', attempt.userId);
         const stats = this.computeStats(existing);
-        await setDoc(userRef, stats, { merge: true });
+        await setDoc(userRef, {
+          ...stats,
+          email: attempt.userEmail,
+          displayName: attempt.userDisplayName,
+          lastUpdated: new Date().toISOString()
+        }, { merge: true });
       } catch (err) {
         console.warn('Could not persist attempt to Firestore, cached locally:', err);
       }
@@ -47,8 +52,10 @@ export class ExamHistoryService {
   }
 
   public async getUserAttempts(userId: string): Promise<ExamAttempt[]> {
-    // 1. Fetch from Firestore if live
-    if (isFirebaseConfigured && !userId.startsWith('demo_')) {
+    if (!userId) return [];
+
+    // 1. Fetch from Firestore if configured
+    if (isFirebaseConfigured) {
       try {
         const q = query(
           collection(db, 'exam_attempts'),
@@ -68,19 +75,12 @@ export class ExamHistoryService {
       }
     }
 
-    // 2. Fallback to local storage
-    let attempts = this.getLocalAttempts(userId);
-
-    // If candidate has 0 attempts, seed 4 realistic demo progression attempts for initial visualization
-    if (attempts.length === 0) {
-      attempts = this.generateSampleProgression(userId);
-      localStorage.setItem(`${LOCAL_ATTEMPTS_PREFIX}${userId}`, JSON.stringify(attempts));
-    }
-
-    return attempts;
+    // 2. Fallback to local storage (strict real data - NO mock seeding)
+    return this.getLocalAttempts(userId);
   }
 
   public getLocalAttempts(userId: string): ExamAttempt[] {
+    if (!userId) return [];
     const raw = localStorage.getItem(`${LOCAL_ATTEMPTS_PREFIX}${userId}`);
     if (!raw) return [];
     try {
@@ -159,98 +159,6 @@ export class ExamHistoryService {
       moduleMastery,
       lastAttemptTimestamp: attempts[attempts.length - 1].timestamp,
     };
-  }
-
-  private generateSampleProgression(userId: string): ExamAttempt[] {
-    const now = Date.now();
-    const day = 24 * 60 * 60 * 1000;
-
-    return [
-      {
-        id: 'mock_att_1',
-        userId,
-        userEmail: 'ce.architect@google.com',
-        userDisplayName: 'Customer Engineer',
-        timestamp: new Date(now - 7 * day).toISOString(),
-        examMode: 'simulation',
-        language: 'en',
-        durationSeconds: 2450,
-        overallScorePercentage: 73.3,
-        totalQuestions: 30,
-        totalCorrect: 22,
-        passed: false,
-        categoryBreakdowns: {
-          M0: { module: 'M0', totalQuestions: 9, correctCount: 7, scorePercentage: 77.8 },
-          M1: { module: 'M1', totalQuestions: 7, correctCount: 5, scorePercentage: 71.4 },
-          M2: { module: 'M2', totalQuestions: 7, correctCount: 5, scorePercentage: 71.4 },
-          M3: { module: 'M3', totalQuestions: 7, correctCount: 5, scorePercentage: 71.4 },
-        },
-        auditTrail: [],
-      },
-      {
-        id: 'mock_att_2',
-        userId,
-        userEmail: 'ce.architect@google.com',
-        userDisplayName: 'Customer Engineer',
-        timestamp: new Date(now - 4 * day).toISOString(),
-        examMode: 'simulation',
-        language: 'en',
-        durationSeconds: 2280,
-        overallScorePercentage: 83.3,
-        totalQuestions: 30,
-        totalCorrect: 25,
-        passed: false,
-        categoryBreakdowns: {
-          M0: { module: 'M0', totalQuestions: 9, correctCount: 8, scorePercentage: 88.9 },
-          M1: { module: 'M1', totalQuestions: 7, correctCount: 6, scorePercentage: 85.7 },
-          M2: { module: 'M2', totalQuestions: 7, correctCount: 6, scorePercentage: 85.7 },
-          M3: { module: 'M3', totalQuestions: 7, correctCount: 5, scorePercentage: 71.4 },
-        },
-        auditTrail: [],
-      },
-      {
-        id: 'mock_att_3',
-        userId,
-        userEmail: 'ce.architect@google.com',
-        userDisplayName: 'Customer Engineer',
-        timestamp: new Date(now - 2 * day).toISOString(),
-        examMode: 'simulation',
-        language: 'en',
-        durationSeconds: 2150,
-        overallScorePercentage: 90.0,
-        totalQuestions: 30,
-        totalCorrect: 27,
-        passed: true,
-        categoryBreakdowns: {
-          M0: { module: 'M0', totalQuestions: 9, correctCount: 9, scorePercentage: 100.0 },
-          M1: { module: 'M1', totalQuestions: 7, correctCount: 6, scorePercentage: 85.7 },
-          M2: { module: 'M2', totalQuestions: 7, correctCount: 6, scorePercentage: 85.7 },
-          M3: { module: 'M3', totalQuestions: 7, correctCount: 6, scorePercentage: 85.7 },
-        },
-        auditTrail: [],
-      },
-      {
-        id: 'mock_att_4',
-        userId,
-        userEmail: 'ce.architect@google.com',
-        userDisplayName: 'Customer Engineer',
-        timestamp: new Date(now - 12 * 60 * 60 * 1000).toISOString(),
-        examMode: 'simulation',
-        language: 'en',
-        durationSeconds: 1980,
-        overallScorePercentage: 93.3,
-        totalQuestions: 30,
-        totalCorrect: 28,
-        passed: true,
-        categoryBreakdowns: {
-          M0: { module: 'M0', totalQuestions: 9, correctCount: 9, scorePercentage: 100.0 },
-          M1: { module: 'M1', totalQuestions: 7, correctCount: 7, scorePercentage: 100.0 },
-          M2: { module: 'M2', totalQuestions: 7, correctCount: 6, scorePercentage: 85.7 },
-          M3: { module: 'M3', totalQuestions: 7, correctCount: 6, scorePercentage: 85.7 },
-        },
-        auditTrail: [],
-      },
-    ];
   }
 }
 

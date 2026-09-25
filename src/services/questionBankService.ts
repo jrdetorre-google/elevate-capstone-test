@@ -176,6 +176,11 @@ export class QuestionBankService {
     return this.questions;
   }
 
+  public getQuestionsByIds(ids: string[]): ExamQuestion[] {
+    const set = new Set(ids);
+    return this.questions.filter(q => set.has(q.id));
+  }
+
   public getSyncStatus(): SyncStatus {
     return { ...this.syncStatus };
   }

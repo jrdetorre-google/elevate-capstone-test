@@ -1,5 +1,6 @@
 import React from 'react';
 import { ExamQuestion, OptionKey, ModuleCode } from '../types/exam';
+import { MarkdownRenderer } from './MarkdownRenderer';
 import { Flag, CheckCircle, XCircle, Info, Sparkles } from 'lucide-react';
 
 interface QuestionCardProps {
@@ -94,10 +95,13 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
         {question.lesson} • ID: {question.id}
       </div>
 
-      {/* Question Stem Text */}
-      <h2 className="text-base sm:text-lg font-medium text-slate-100 leading-relaxed pt-1 pb-6">
-        {question.question}
-      </h2>
+      {/* Question Stem Text with Markdown Parsing */}
+      <div className="pt-1 pb-6">
+        <MarkdownRenderer
+          content={question.question}
+          className="text-base sm:text-lg font-medium text-slate-100 leading-relaxed"
+        />
+      </div>
 
       {/* Options List */}
       <div className="space-y-3">
@@ -139,9 +143,9 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
                 {option.key}
               </div>
 
-              {/* Option Text */}
+              {/* Option Text with Markdown Parsing */}
               <div className="flex-1 text-slate-200 leading-normal pt-0.5">
-                {option.text}
+                <MarkdownRenderer content={option.text} />
               </div>
 
               {/* Feedback Icons */}
@@ -177,14 +181,16 @@ export const QuestionCard: React.FC<QuestionCardProps> = ({
         </div>
       )}
 
-      {/* Slide Explanation (Study / Review Mode) */}
+      {/* Slide Explanation with Markdown Parsing (Study / Review Mode) */}
       {showFeedback && question.explanation && (
         <div className="mt-6 p-4 rounded-xl bg-slate-950/80 border border-slate-800 text-xs sm:text-sm text-slate-300">
           <div className="flex items-center space-x-2 text-blue-400 font-semibold mb-1.5">
             <Info className="w-4 h-4" />
             <span>Project Elevate Curriculum Context & Slide Reference</span>
           </div>
-          <p className="leading-relaxed pl-6">{question.explanation}</p>
+          <div className="leading-relaxed pl-6">
+            <MarkdownRenderer content={question.explanation} />
+          </div>
         </div>
       )}
     </div>

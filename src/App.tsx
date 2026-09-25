@@ -1,14 +1,16 @@
 import React, { useState } from 'react';
-import { AuthProvider } from './context/AuthContext';
+import { AuthProvider, useAuth } from './context/AuthContext';
 import { ExamProvider, useExam } from './context/ExamContext';
 import { Navbar } from './components/Navbar';
+import { LoginGateway } from './components/LoginGateway';
 import { ExamPage } from './pages/ExamPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { StudyPage } from './pages/StudyPage';
 import { ModuleCode } from './types/exam';
-import { ShieldCheck, Cloud, Cpu } from 'lucide-react';
+import { ShieldCheck, Cloud, Cpu, Loader2 } from 'lucide-react';
 
 const AppContent: React.FC = () => {
+  const { user, loading } = useAuth();
   const [currentTab, setCurrentTab] = useState<'exam' | 'dashboard' | 'study'>('exam');
   const { selectedLanguage, setLanguage, startExam } = useExam();
 
@@ -17,6 +19,22 @@ const AppContent: React.FC = () => {
     startExam('module', 1, module);
   };
 
+  // 1. Loading Verification State
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-slate-950 flex flex-col items-center justify-center p-4">
+        <Loader2 className="w-10 h-10 text-blue-500 animate-spin mb-4" />
+        <p className="text-slate-400 text-sm font-medium font-mono">Verificando credencial de acceso Google...</p>
+      </div>
+    );
+  }
+
+  // 2. Strict Entry Portal Gatekeeper: Zero unauthenticated access
+  if (!user) {
+    return <LoginGateway />;
+  }
+
+  // 3. Authenticated Application Content
   return (
     <div className="min-h-screen bg-slate-950 text-slate-100 flex flex-col font-sans selection:bg-blue-600 selection:text-white">
       {/* Top Navbar */}
