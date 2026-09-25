@@ -1,16 +1,27 @@
-# Production runtime image: Serve pre-built SPA via Nginx
+# Stage 1: Build the React SPA
+FROM node:22-alpine AS builder
+
+WORKDIR /app
+
+# Copy dependency manifests
+COPY package.json package-lock.json ./
+
+# Install dependencies
+RUN npm ci --prefer-offline --no-audit
+
+# Copy application source
+COPY . .
+
+# Build production bundle
+RUN npm run build
+
+# Stage 2: Serve via Nginx
 FROM nginx:1.27-alpine
 
-# Set working directory
-WORKDIR /usr/share/nginx/html
+# Copy built distribution files
+COPY --from=builder /app/dist /usr/share/nginx/html
 
-# Remove default nginx static assets
-RUN rm -rf ./*
-
-# Copy pre-compiled production build
-COPY dist/ .
-
-# Copy hardened nginx configuration with SPA routing
+# Copy custom nginx configuration
 COPY nginx.conf /etc/nginx/conf.d/default.conf
 
 # Default Cloud Run port
