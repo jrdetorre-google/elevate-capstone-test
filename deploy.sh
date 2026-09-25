@@ -45,6 +45,9 @@ gcloud storage buckets add-iam-policy-binding "gs://${BUCKET_NAME}" \
   --role="roles/storage.objectViewer" || true
 
 # 5. Build and Deploy Container to Cloud Run
+echo "--> Compiling production frontend bundle..."
+npm run build
+
 echo "--> Deploying to Cloud Run in ${REGION}..."
 gcloud run deploy "$SERVICE_NAME" \
   --source . \
