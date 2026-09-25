@@ -2,8 +2,8 @@
 
 > **Document Purpose**: This `.md` file contains:
 > 1. The **strategic analysis** of accreditation objectives and Capstone structure for the **Project Elevate: Advanced Agentic AI** program, extracted from internal documentation in Google Drive, Gmail, and Moma.
-> 2. The **Functional and Technical Specification (`SPEC.md`)** ready for direct ingestion by **Google Antigravity 2.0 / CLI** to build a modern interactive web application for exam simulation featuring **Google Identity Authentication**, **database persistence of exam attempt history**, **personalized user dashboard tracking historical performance evolution over time (overall score % and category breakdowns, where categories are strictly the 4 thematic modules: M0, M1, M2, M3)**, and a **dynamic language selector with Gemini API pre-render translation** before questions are displayed on screen.
-> 3. The reference to the **Canonical English Question Corpus (150 Questions & Answers)**, managed in a decoupled, independent document at [`questions.md`](questions.md), ensuring a clean architectural separation between application logic and data.
+> 2. The **Functional and Technical Specification (`SPEC.md`)** ready for direct ingestion by **Google Antigravity 2.0 / CLI** to build a modern interactive web application for exam simulation featuring **Google Identity Authentication**, **database persistence of exam attempt history**, **personalized user dashboard tracking historical performance evolution over time (overall score % and category breakdowns, where categories are strictly the 4 thematic modules: M0, M1, M2, M3)**, a **dynamic language selector with Gemini API pre-render translation** before questions are displayed on screen, and a **dynamic Google Cloud Storage bucket question synchronization engine (daily automatic refresh & on-demand manual reload)**.
+> 3. The reference to the **Canonical English Question Corpus (150 Questions & Answers)**, managed in a decoupled, independent document at [`questions.md`](questions.md) and designed to be stored and served from a **Google Cloud Storage bucket** for seamless future expansion.
 
 ---
 
@@ -55,14 +55,21 @@ The official Capstone evaluation consists of **3 sequential components** (with c
 
 ## 2. Specification for Google Antigravity (`SPEC.md`) — Assessment Application with Google Identity, Database History, Evolution Dashboard, and Gemini Dynamic Translation
 
-> **Instructions for Antigravity**: Build a modern, responsive, and performant web application (using **React + TypeScript + Vite + Tailwind CSS + Lucide Icons + Recharts + `@google/genai`**) that loads the **Canonical English Corpus of 150 questions** from [`questions.md`](questions.md) (or `elevate_questions_150.json`) with the following comprehensive architecture:
+> **Instructions for Antigravity**: Build a modern, responsive, and performant web application (using **React + TypeScript + Vite + Tailwind CSS + Lucide Icons + Recharts + `@google/genai`**) that loads the **Canonical English Corpus of 150 questions** from [`questions.md`](questions.md) (or `elevate_questions_150.json`), supporting **dynamic Cloud Storage bucket storage with automated daily refresh and on-demand reload**, with the following comprehensive architecture:
 > 1. **Google Identity & Authentication**: Seamless sign-in via **Google Identity Services (GIS) / Firebase Auth with Google Provider**, capturing user profile data (`uid`, `email`, `displayName`, `photoURL`), session persistence, and route protection.
 > 2. **Database & Exam History Persistence**: Persistent storage in **Cloud Firestore / Firebase** for every completed simulation attempt, logging timestamp, exam mode, duration, **overall accuracy percentage**, and **accuracy percentages broken down by question category (where categories are strictly defined as the 4 thematic modules: M0, M1, M2, M3)**, alongside full question-by-question audit records.
 > 3. **Personalized Time-Series Evolution Dashboard**: For each authenticated user, a visual performance panel tracking **results evolution over time** via time-series charts (overall % evolution versus the 90% benchmark, and comparative evolution curves for each category: M0, M1, M2, M3), aggregated KPIs, strength/gap diagnostics, and an interactive historical table with question-level review modals.
 > 4. **Pre-Render Dynamic Translation via Gemini API**: Exam language selector that translates questions, options, and explanations dynamically via Gemini before rendering on screen, guaranteeing zero layout flicker and strict preservation of official technical terminology.
+> 5. **Cloud Storage Dynamic Question Corpus (Daily Auto-Refresh & On-Demand Reload)**: The question corpus is decoupled from the application container and stored in a **Google Cloud Storage (GCS) bucket** (`gs://elevate-capstone-testprep-questions/`). The application caches questions locally, checks and auto-reloads from the bucket **once a day (24-hour TTL)**, and provides an **immediate on-demand reload trigger** whenever requested by the user or an administrator.
 
 ```mermaid
 flowchart TD
+    subgraph Bucket["0. Cloud Storage Question Repository (GCS)"]
+        GCS[("gs://elevate-capstone-testprep-questions/\nquestions.json / questions.md")]
+        SYNC["Ingestion & Sync Engine\n• Daily Auto-Sync (24h TTL)\n• On-Demand Reload Trigger"]
+        GCS <-->|"Periodic / Manual Fetch"| SYNC
+    end
+
     subgraph Auth["1. Google Identity Authentication"]
         A["User (CE / Candidate)"] -->|"Google Sign-In (GIS / Firebase)"| B["Active Session: uid, email, photoURL"]
         B -->|"Sync Profile"| USR[("users/{userId} Collection")]
@@ -70,7 +77,8 @@ flowchart TD
 
     subgraph Exam["2. Exam Engine & Translation Pipeline"]
         B -->|"Configure & Start Exam"| C["Language Selector + Exam Mode"]
-        C -->|"Load Questions"| Q[("questions.md (150 Qs)")]
+        SYNC -->|"Cached Question Corpus"| Q[("Local / Memory Question Bank (150+ Qs)")]
+        C -->|"Load Active Questions"| Q
         C -->|"Pre-Render Translation (if != en)"| GEM["Gemini API (gemini-2.5-flash)"]
         GEM --> D["Exam Simulator (30 Qs / 45 min)"]
         Q --> D
@@ -89,6 +97,8 @@ flowchart TD
         DASH --> CH2["Chart 2: Category-Level Evolution Over Time (M0, M1, M2, M3)"]
         DASH --> CH3["Chart 3: Category Mastery Radar & Gap Analysis"]
         DASH --> REV["Audit Table & Question Review Modal"]
+        DASH --> RELOAD["On-Demand 'Reload Questions' Button"]
+        RELOAD -->|"Force Sync Now"| SYNC
     end
 ```
 
@@ -762,12 +772,210 @@ Upon completing any of the following exam modes, the application automatically e
 
 ---
 
-## 3. Canonical Question Repository (`questions.md`)
+### 2.8 Cloud Storage Bucket Question Repository & Dynamic Synchronization Pipeline (`questionBankService.ts`)
+
+To support future stages of the Project Elevate Capstone—where question sets, case studies, or newly introduced curriculum topics may be updated, expanded, or refined dynamically without requiring code modifications or container rebuilds—the application architecture includes a **Cloud Storage Bucket Ingestion & Synchronization Engine**.
+
+#### 2.8.1 Cloud Storage Architecture & Target Configuration
+1. **Google Cloud Storage (GCS) Bucket Repository**:
+   - Primary bucket location: `gs://elevate-capstone-testprep-questions/` (configured via environment variable `VITE_QUESTIONS_BUCKET_URL` or runtime config).
+   - Authoritative assets stored in bucket:
+     - `questions.json`: Primary structured pre-compiled JSON asset representing the canonical array of `ExamQuestion[]`.
+     - `questions.md`: Canonical human-readable Markdown repository (supporting runtime parsing).
+     - `metadata.json`: Versioning descriptor containing `{ version: string, lastUpdated: string, questionCount: number, hash: string }`.
+2. **Access Security & Network Protocols**:
+   - Accessible via signed URLs, Google Cloud API Gateway, or public CORS-enabled HTTPS read endpoints (e.g., `https://storage.googleapis.com/elevate-capstone-testprep-questions/questions.json`).
+   - Integrated with standard HTTP cache headers (`ETag`, `Last-Modified`, `Cache-Control: public, max-age=3600`).
+
+#### 2.8.2 Dual Synchronization Strategy (Daily Auto-Refresh & On-Demand Reload)
+The synchronization engine operates under two distinct, complementary mechanisms:
+
+1. **Daily Automatic Background Synchronization (24-Hour TTL)**:
+   - On application startup or when an authenticated user initializes an exam session, the application checks the local synchronization metadata:
+     - Storage key: `elevate_questions_last_sync` (timestamp in milliseconds).
+     - Condition: `Date.now() - lastSyncTimestamp >= 24 * 60 * 60 * 1000` (86,400,000 ms).
+   - If 24 hours have elapsed since the last successful sync:
+     - An asynchronous background fetch query is dispatched to the GCS bucket (`If-None-Match: <cached_etag>` or `If-Modified-Since: <cached_date>`).
+     - If HTTP 304 (Not Modified) is returned, the timestamp is refreshed without re-downloading.
+     - If HTTP 200 is returned with fresh content, the new corpus is validated against the `ExamQuestion[]` schema, persisted to local cache (`IndexedDB` or `localStorage` key `elevate_questions_cache`), and loaded into active memory.
+     - A non-intrusive notification toast informs the user: *"Question corpus refreshed from Cloud Storage (150 questions active)."*
+
+2. **On-Demand Manual Reload Trigger ("Reload Questions Now")**:
+   - The UI provides an explicit administrative and user-facing action button (located in the application header/navbar, Settings modal, or Dashboard header):
+     - Button label: `Sync Questions` / `Reload from Bucket`.
+     - Status indicator: Displays the date/time of the last sync (e.g., *"Last synced: Today at 09:30 AM"*).
+   - When clicked:
+     - Dispatches `questionBankService.reloadQuestions({ force: true })`.
+     - Bypasses local HTTP and memory caches.
+     - Fetches the latest `questions.json` directly from the Cloud Storage bucket with timestamp busting (`?t=${Date.now()}`).
+     - Validates question integrity and displays a spinner followed by a success toast: *"Successfully reloaded {count} questions from Cloud Storage."*
+
+3. **Graceful Fallback & Zero-Downtime Guarantee**:
+   - If the GCS bucket is temporarily unreachable (e.g., network partition, offline work, or initial development without cloud credentials), the service automatically falls back to the local bundled canonical corpus ([`questions.md`](questions.md) or bundled `elevate_questions_150.json`).
+   - The application will **never crash or display an empty state** due to a bucket connection issue.
+
+#### 2.8.3 TypeScript Reference Implementation (`services/questionBankService.ts`)
+```typescript
+import { ExamQuestion } from "../types/exam";
+import fallbackQuestions from "../data/elevate_questions_150.json";
+
+const BUCKET_URL = import.meta.env.VITE_QUESTIONS_BUCKET_URL || 
+  "https://storage.googleapis.com/elevate-capstone-testprep-questions/questions.json";
+
+const STORAGE_KEYS = {
+  CACHE: "elevate_questions_cache",
+  LAST_SYNC: "elevate_questions_last_sync",
+  ETAG: "elevate_questions_etag",
+};
+
+const ONE_DAY_MS = 24 * 60 * 60 * 1000;
+
+export interface SyncStatus {
+  lastSync: Date | null;
+  questionCount: number;
+  source: "bucket" | "cache" | "fallback";
+  isSyncing: boolean;
+  error?: string;
+}
+
+export class QuestionBankService {
+  private static instance: QuestionBankService;
+  private questions: ExamQuestion[] = [];
+  private syncStatus: SyncStatus = {
+    lastSync: null,
+    questionCount: 0,
+    source: "fallback",
+    isSyncing: false,
+  };
+
+  private constructor() {
+    this.initialize();
+  }
+
+  public static getInstance(): QuestionBankService {
+    if (!QuestionBankService.instance) {
+      QuestionBankService.instance = new QuestionBankService();
+    }
+    return QuestionBankService.instance;
+  }
+
+  private initialize(): void {
+    // 1. Load from local cache if present
+    const cached = localStorage.getItem(STORAGE_KEYS.CACHE);
+    const lastSyncStr = localStorage.getItem(STORAGE_KEYS.LAST_SYNC);
+    
+    if (cached) {
+      try {
+        this.questions = JSON.parse(cached);
+        this.syncStatus.source = "cache";
+        this.syncStatus.questionCount = this.questions.length;
+      } catch (e) {
+        this.questions = fallbackQuestions as ExamQuestion[];
+        this.syncStatus.source = "fallback";
+      }
+    } else {
+      this.questions = fallbackQuestions as ExamQuestion[];
+      this.syncStatus.source = "fallback";
+    }
+
+    if (lastSyncStr) {
+      this.syncStatus.lastSync = new Date(parseInt(lastSyncStr, 10));
+    }
+
+    // 2. Perform daily auto-sync check
+    this.checkDailyAutoSync();
+  }
+
+  public async checkDailyAutoSync(): Promise<void> {
+    const lastSyncTime = this.syncStatus.lastSync ? this.syncStatus.lastSync.getTime() : 0;
+    const now = Date.now();
+
+    if (now - lastSyncTime >= ONE_DAY_MS) {
+      console.log("[QuestionBank] 24 hours elapsed since last sync. Initiating daily background refresh...");
+      await this.reloadQuestions({ force: false });
+    }
+  }
+
+  public async reloadQuestions(options: { force?: boolean } = {}): Promise<ExamQuestion[]> {
+    this.syncStatus.isSyncing = true;
+    try {
+      const headers: HeadersInit = {};
+      const cachedEtag = localStorage.getItem(STORAGE_KEYS.ETAG);
+
+      if (!options.force && cachedEtag) {
+        headers["If-None-Match"] = cachedEtag;
+      }
+
+      const url = options.force ? `${BUCKET_URL}?t=${Date.now()}` : BUCKET_URL;
+      const response = await fetch(url, { headers });
+
+      if (response.status === 304) {
+        // Not modified — update sync timestamp
+        const now = Date.now();
+        localStorage.setItem(STORAGE_KEYS.LAST_SYNC, now.toString());
+        this.syncStatus.lastSync = new Date(now);
+        this.syncStatus.isSyncing = false;
+        return this.questions;
+      }
+
+      if (!response.ok) {
+        throw new Error(`Cloud Storage responded with status ${response.status}: ${response.statusText}`);
+      }
+
+      const data: ExamQuestion[] = await response.json();
+      
+      // Basic Schema Validation
+      if (!Array.isArray(data) || data.length === 0 || !data[0].id || !data[0].question) {
+        throw new Error("Invalid question schema received from Cloud Storage bucket");
+      }
+
+      const etag = response.headers.get("ETag");
+      if (etag) {
+        localStorage.setItem(STORAGE_KEYS.ETAG, etag);
+      }
+
+      this.questions = data;
+      const now = Date.now();
+      localStorage.setItem(STORAGE_KEYS.CACHE, JSON.stringify(data));
+      localStorage.setItem(STORAGE_KEYS.LAST_SYNC, now.toString());
+
+      this.syncStatus = {
+        lastSync: new Date(now),
+        questionCount: data.length,
+        source: "bucket",
+        isSyncing: false,
+      };
+
+      return this.questions;
+    } catch (err: any) {
+      console.warn("[QuestionBank] Failed to fetch questions from bucket, falling back:", err);
+      this.syncStatus.isSyncing = false;
+      this.syncStatus.error = err.message;
+      return this.questions; // Returns existing questions or fallback
+    }
+  }
+
+  public getQuestions(): ExamQuestion[] {
+    return this.questions;
+  }
+
+  public getSyncStatus(): SyncStatus {
+    return { ...this.syncStatus };
+  }
+}
+
+export const questionBankService = QuestionBankService.getInstance();
+```
+
+---
+
+## 3. Canonical Question Repository (`questions.md` & Cloud Storage Bucket)
 
 > **Architectural Separation of Specification and Question Corpus**:
 > To ensure modularity, maintainability, and clean decoupling, the complete corpus of 150 exam questions and answers is managed independently in:
 > 
 > 📄 **Canonical Question Document**: [`questions.md`](questions.md)
+> 🪣 **Cloud Storage Bucket Target**: `gs://elevate-capstone-testprep-questions/questions.json`
 
 ### 3.1 Structure & Metadata in `questions.md`
 The file [`questions.md`](questions.md) serves as the authoritative **Single Source of Truth** and contains:
@@ -792,5 +1000,19 @@ The file [`questions.md`](questions.md) serves as the authoritative **Single Sou
 
 ### 3.2 Ingestion & Loading into the Application
 The web application (React/TypeScript) must ingest questions via either of the following approaches:
-1. **Build-Time / Runtime Markdown Parser**: An ingestion utility that reads [`questions.md`](questions.md) and parses `#### Qxxx` blocks into an array of `ExamQuestion[]` objects.
-2. **JSON Build Artifact Generation (`elevate_questions_150.json`)**: Direct pre-compilation into a static JSON asset for zero-overhead client loading.
+1. **Dynamic Cloud Storage Ingestion**: Fetching `questions.json` from the GCS bucket at runtime with daily background refresh and on-demand reload.
+2. **Build-Time / Runtime Markdown Parser**: An ingestion utility that reads [`questions.md`](questions.md) and parses `#### Qxxx` blocks into an array of `ExamQuestion[]` objects.
+3. **JSON Build Artifact Generation (`elevate_questions_150.json`)**: Direct pre-compilation into a static JSON asset for zero-overhead client loading and offline fallback.
+
+### 3.3 Dynamic Cloud Storage Deployment & Future Corpus Evolution
+To update or expand the question bank in future stages without redeploying the web application:
+1. **Corpus Modification**: Edit [`questions.md`](questions.md) or compile into `questions.json` with new questions or updated explanations.
+2. **Bucket Upload**: Synchronize to the Google Cloud Storage bucket:
+   ```bash
+   gcloud storage cp questions.json gs://elevate-capstone-testprep-questions/questions.json \
+     --cache-control="public, max-age=3600"
+   ```
+3. **Automatic Client Uptake**:
+   - Clients automatically detect and consume the updated corpus within 24 hours during their daily auto-sync cycle.
+   - Candidates or test administrators can click **"Sync Questions"** in the UI to immediately load the new corpus into their active session.
+
