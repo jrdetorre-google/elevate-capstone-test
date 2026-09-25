@@ -1,7 +1,7 @@
-# Banco Canónico de Preguntas (questions.md) — Project Elevate Capstone (Customer Engineering)
+# Canonical Question Bank (questions.md) — Project Elevate Capstone (Customer Engineering)
 
-> **Propósito de este documento**: Este archivo contiene el **Corpus Canónico en Inglés (`English Corpus`) de 150 Preguntas y Respuestas** para la preparación y acreditación del **Project Elevate Capstone**.
-> Sirve como la **Fuente Única de Verdad (`Single Source of Truth`)** de datos para la aplicación de simulación descrita en [`spec.md`](spec.md).
+> **Document Purpose**: This file contains the **Canonical English Question Corpus (150 Questions & Answers)** for preparation and accreditation in the **Project Elevate Capstone**.
+> It serves as the authoritative **Single Source of Truth** data repository for the simulation web application specified in [`spec.md`](spec.md).
 
 ---
 
