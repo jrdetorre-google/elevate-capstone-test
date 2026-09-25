@@ -1,9 +1,0 @@
-A partir del document spec.md, crea todo lo necesario para crear la aplicación indicada. Quiero que consultes conmigo las decisiones relevantes. 
-La aplicación tiene que ser en inglés, aunque luego las preguntas se puedan mostrar en cualquier idioma según la aplicación.
-Con mis credenciales, crearás y desplegarás la aplicación en cloud run en el proyecto con project id: elevate-capstone-testprep
-Despliega todos los servicios necesarios, para la ejecución del front-end, del back-end y de las bases de datos necesarias. También la gestión de identidad para el acceso a la aplicación y los resultados de intentos anteriores.
-
-
-
-Modifica el documento spec.md para que tenga en cuenta que los usuarios se logarán con la identidad de google y en una base de datos se guardará un histórico de los resultados de las pruebas de emulación de examen que se vayan haciendo, con procentaje de acierto global y por categoría de preguntas. 
-Para cada usuario habrá un dashboard en el que se vaya viendo la evolución de los resultados a lo largo del tiempo con porcentajes de acierto global y por categorías.

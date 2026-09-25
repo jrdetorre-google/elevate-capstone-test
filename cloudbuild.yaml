@@ -1,0 +1,26 @@
+steps:
+  # Build the container image using Cloud Build
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'europe-southwest1-docker.pkg.dev/$PROJECT_ID/elevate-repo/elevate-capstone-simulator:$COMMIT_SHA', '.']
+
+  # Push to Artifact Registry
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'europe-southwest1-docker.pkg.dev/$PROJECT_ID/elevate-repo/elevate-capstone-simulator:$COMMIT_SHA']
+
+  # Deploy container image to Cloud Run
+  - name: 'gcr.io/google.com/cloudsdktool/cloud-sdk'
+    entrypoint: gcloud
+    args:
+      - 'run'
+      - 'deploy'
+      - 'elevate-capstone-simulator'
+      - '--image'
+      - 'europe-southwest1-docker.pkg.dev/$PROJECT_ID/elevate-repo/elevate-capstone-simulator:$COMMIT_SHA'
+      - '--region'
+      - 'europe-southwest1'
+      - '--platform'
+      - 'managed'
+      - '--allow-unauthenticated'
+
+images:
+  - 'europe-southwest1-docker.pkg.dev/$PROJECT_ID/elevate-repo/elevate-capstone-simulator:$COMMIT_SHA'

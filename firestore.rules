@@ -1,0 +1,23 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // User profile and aggregate statistics
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Historical exam simulation attempts (Immutable audit trail)
+    match /exam_attempts/{attemptId} {
+      // Allow candidates to read only their own attempts
+      allow read: if request.auth != null && resource.data.userId == request.auth.uid;
+      
+      // Allow candidates to record new attempts under their own UID
+      allow create: if request.auth != null && request.resource.data.userId == request.auth.uid;
+      
+      // Disallow mutation or deletion to maintain audit integrity
+      allow update, delete: if false;
+    }
+  }
+}

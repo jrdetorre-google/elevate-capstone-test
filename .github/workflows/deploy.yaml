@@ -1,0 +1,55 @@
+name: Deploy Elevate Capstone Simulator to Cloud Run
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+env:
+  PROJECT_ID: elevate-capstone-testprep
+  REGION: europe-southwest1
+  SERVICE_NAME: elevate-capstone-simulator
+  BUCKET_NAME: elevate-capstone-testprep-questions
+
+jobs:
+  build-and-deploy:
+    name: Build & Deploy
+    runs-on: ubuntu-latest
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Authenticate to Google Cloud
+        id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          project_id: ${{ env.PROJECT_ID }}
+          # Supports Workload Identity Federation or Service Account Key
+          # workload_identity_provider: 'projects/123456789/locations/global/workloadIdentityPools/github-pool/providers/github-provider'
+          # service_account: 'elevate-deployer@elevate-capstone-testprep.iam.gserviceaccount.com'
+        continue-on-error: true
+
+      - name: Setup Cloud SDK
+        uses: google-github-actions/setup-gcloud@v2
+        if: steps.auth.outcome == 'success'
+
+      - name: Sync Corpus to Cloud Storage
+        if: steps.auth.outcome == 'success'
+        run: |
+          gcloud storage cp public/data/questions.json gs://${{ env.BUCKET_NAME }}/questions.json --cache-control="public, max-age=3600"
+
+      - name: Build & Deploy to Cloud Run
+        if: steps.auth.outcome == 'success'
+        run: |
+          gcloud run deploy ${{ env.SERVICE_NAME }} \
+            --source . \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --set-env-vars="VITE_QUESTIONS_BUCKET_URL=https://storage.googleapis.com/${{ env.BUCKET_NAME }}/questions.json"
